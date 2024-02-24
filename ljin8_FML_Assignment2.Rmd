@@ -1,0 +1,177 @@
+---
+title: "ljin8_FML_Assignment_2"
+output:
+  pdf_document: default
+  html_document: default
+date: "2024-02-18"
+---
+
+```{r}
+# Load required libraries
+library(caret)
+library(class)
+library(knitr)
+library(class)
+library(ggplot2)
+library(dplyr)
+library(gmodels)
+
+# Read the data
+data <- read.csv("C:\\Users\\leile\\OneDrive\\School-Kent\\Fundamental of machine learning\\FML ASSIGNMENT.2\\UniversalBank.csv")
+```
+
+```{r}
+# Remove ID and ZIP code columns
+mydata <- data[, -c(1, 5)]
+str(mydata)
+
+# Transform categorical predictors into dummy variables
+mydata$Education <- as.factor(mydata$Education)
+groups<-dummyVars(~. , data=mydata)
+bankdata<-as.data.frame(predict(groups, mydata))
+head(bankdata)
+
+#Define success level of personal loan as 1. In "R" first level is failure and second is success. In this case, the default is set to success.  
+bankdata$Personal.Loan <- as.factor(bankdata$Personal.Loan)
+levels(bankdata$Personal.Loan)
+```
+
+```{r}
+# Partition the data into training (60%) and validation (40%) sets
+train_indices <- createDataPartition(bankdata$Personal.Loan, p=0.6, list=FALSE)
+train_data <- bankdata[train_indices, ]
+valid_data <- bankdata[-train_indices, ]
+
+train_lab <- train_data$Personal.Loan
+valid_lab <- valid_data$Personal.Loan
+
+train_pred <- train_data [,-10]
+valid_pred <- valid_data [,-10]
+
+#normalize preProcess
+Norm_model <- preProcess(train_pred, method = c("center", "scale"))
+train_norm <- predict(Norm_model, train_data)
+head(train_norm)
+
+valid_norm<-predict(Norm_model, valid_data)
+head(valid_norm)
+```
+
+```{r}
+#Question 1
+##creating the test data set(specific_customer) and test normalization
+specific_customer <- data.frame(Age = 40, Experience = 10, Income = 84, Family = 2, CCAvg = 2, Education.1 = 0, Education.2 = 1, Education.3 = 0, Mortgage = 0, Securities.Account = 0, CD.Account = 0, Online = 1, CreditCard = 1)
+
+test_norm<-predict(Norm_model, specific_customer)
+head(test_norm)
+
+#Perform k-NN classification for a specific customer
+specific_customer <- as.matrix(specific_customer)
+predicted_loan_acceptance <- knn(train_norm[ ,-10], test_norm, train_lab, k = 1)
+predicted_loan_acceptance
+
+```
+##The Output suggests that the model predicts that a person with these criteria would not take out a personal loan.
+
+```{r}
+#Question 2
+# Convert Personal.Loan to a factor with two levels
+train_data$Personal.Loan <- factor(train_data$Personal.Loan, levels = c(0, 1))
+
+# Find the best k using cross-validation
+set.seed(123)
+search_grid <- expand.grid(k = 1:20)
+model <- train(Personal.Loan ~ ., data = train_norm,
+               method = "knn", tuneGrid = search_grid,
+               trControl = trainControl(method = "cv"))
+model
+
+best_k <- model$bestTune[[1]]
+#K = 1 will give the best value for K 
+```
+## Accuracy was used to select the optimal model using the largest value.
+## The final value used for the model was k = 1.
+
+```{r}
+#Question 3
+#Train a knn model where k=1
+Predicted_valid_lab<-knn(train_norm, valid_norm, train_lab, k = best_k)
+head(Predicted_valid_lab)
+
+# Show the confusion matrix for the validation data
+conf_matrix <- confusionMatrix(Predicted_valid_lab,valid_lab)
+conf_matrix
+
+CrossTable(x=valid_lab, y=Predicted_valid_lab,prop.chisq = FALSE)
+```
+
+```{r}
+#Question 4
+# Classify another specific customer using the best k
+
+predicted_loan_acceptance_specific <- knn(train_norm[, -10], test_norm, cl=train_lab, k = best_k)
+predicted_loan_acceptance_specific
+```
+##Customer using the new K value will also not accept the loan offer.
+
+```{r}
+#Question 5
+# Repartition the data into training, validation, and test sets (50% : 30% : 20%)
+set.seed(123) # for reproducibility
+train_index <- createDataPartition(bankdata$Personal.Loan, p = 0.5, list = FALSE)
+train_dataN <- bankdata[train_index, ]
+temp_dataN <- bankdata[-train_index, ]
+nrow(train_dataN)
+
+validation_index <- createDataPartition(temp_dataN$Personal.Loan, p = 0.6, list = FALSE)
+validation_dataN <- temp_dataN[validation_index, ]
+test_dataN <- temp_dataN[-validation_index, ]
+nrow(validation_dataN)
+nrow(test_dataN)
+```
+
+```{r}
+#normailize preProcess
+Norm_modelN <- preProcess(train_dataN, method = c("center", "scale"))
+train_normN <- predict(Norm_modelN, train_dataN)
+head(train_normN)
+
+valid_normN<-predict(Norm_modelN, validation_dataN)
+head(valid_normN)
+
+test_normN<-predict(Norm_modelN, test_dataN)
+head(test_normN)
+```
+
+```{r}
+#Classifying the customer from all 3 set (training,validation and testing) using the best k
+Train_predictorsN <-train_normN[,-10]
+Train_labelN<-train_normN[,10]
+Valid_predictorsN<-valid_normN[,-10]
+Valid_labelN<-valid_normN[,10]
+Test_predictorsN<-test_normN[,-10]
+Test_labelN<-test_normN[,10]
+Training_prediction_N <-knn(Train_predictorsN,Train_predictorsN,cl=Train_labelN,k=best_k)
+head(Training_prediction_N)
+
+Validation_prediction_N <-knn(Train_predictorsN,Valid_predictorsN,cl=Train_labelN,k=best_k)
+head(Validation_prediction_N)
+
+Test_prediction_N <-knn(Train_predictorsN,Test_predictorsN,cl=Train_labelN,k=best_k)
+head(Test_prediction_N)
+```
+
+```{r}
+#the confusion matrix using both the functions for all 3 data sets Training, Validation and Test
+confusionMatrix(Training_prediction_N,Train_labelN)
+CrossTable(x=Train_labelN,y=Training_prediction_N,prop.chisq=FALSE)
+
+confusionMatrix(Validation_prediction_N,Valid_labelN)
+CrossTable(x=Valid_labelN,y=Validation_prediction_N,prop.chisq=FALSE)
+
+confusionMatrix(Test_prediction_N,Test_labelN)
+CrossTable(x=Test_labelN,y=Test_prediction_N,prop.chisq=FALSE)
+
+```
+##The confusion matrices were generated for the training, validation, and test datasets. 
+##In line with KNN model expectations, the training set confusion matrix demonstrates 100% accuracy with k=1, as the model has already seen these values. The validation set confusion matrix indicates an overall accuracy of 96.67%, with a notable sensitivity of 98.75% but a lower specificity of 77.08%. This suggests that the model struggles more with accurately predicting loan acceptances, although it excels in identifying loan rejections. Similarly, the test set confusion matrix shows a high overall accuracy of 96.7%, with a sensitivity of 99.45% and a specificity of 70.83%. These results closely resemble those of the validation set, indicating consistency in model performance across datasets.
